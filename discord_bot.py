@@ -24,7 +24,7 @@ threading.Thread(target=run_flask, daemon=True).start()
 # ------------------------------------------------------------------
 
 TOKEN = os.environ.get('DISCORD_TOKEN')
-CHANNEL_ID = 123456789012345678  # PODMIEŃ NA SWÓJ ID KANAŁU DISCORD!
+CHANNEL_ID = 1533864846527955157
 
 intents = discord.Intents.default()
 bot = discord.Client(intents=intents)
