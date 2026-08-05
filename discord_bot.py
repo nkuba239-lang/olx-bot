@@ -90,7 +90,7 @@ async def sprawdzaj_okazje():
 
     # 2. Vinted
     try:
-        okazje_vinted = await asyncio-to_thread(pobierz_okazje_vinted, SLOWNIK_CEN, 15)
+        okazje_vinted = await asyncio.to_thread(pobierz_okazje_vinted, SLOWNIK_CEN, 15)
     except Exception as e:
         print(f"❌ Błąd Vinted: {e}")
         okazje_vinted = []
