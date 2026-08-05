@@ -19,8 +19,8 @@ PORT = int(os.environ.get("PORT", 10000))
 
 SLOWNIK_CEN = {
     "astro bot": 180,
-    "gta v": 60,
-    "gta 5": 60,
+    "gta v": 500,
+    "gta 5": 500,
     "god of war ragnarok": 120,
     "spiderman 2": 160,
     "elden ring": 130,
