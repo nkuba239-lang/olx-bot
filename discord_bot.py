@@ -19,7 +19,7 @@ PORT = int(os.environ.get("PORT", 10000))
 
 SLOWNIK_CEN = {
     "astro bot": 180,
-    "gta v": 500,
+    "gta v": 500,  
     "gta 5": 500,
     "god of war ragnarok": 120,
     "spiderman 2": 160,
@@ -34,23 +34,12 @@ SLOWNIK_CEN = {
     "wiedźmin 3": 50
 }
 
-PLIK_BAZY = "wyslane.json"
-
+# Czysta baza na czas testu (żeby wysłało wszystko)
 def wczytaj_wyslane():
-    if os.path.exists(PLIK_BAZY):
-        try:
-            with open(PLIK_BAZY, "r") as f:
-                return set(json.load(f))
-        except Exception:
-            return set()
     return set()
 
 def zapisz_wyslane(baza):
-    try:
-        with open(PLIK_BAZY, "w") as f:
-            json.dump(list(baza), f)
-    except Exception as e:
-        print(f"Błąd zapisu bazy: {e}", flush=True)
+    pass
 
 wyslane_linki = wczytaj_wyslane()
 
@@ -72,8 +61,9 @@ async def on_ready():
     print(f"✅ Zalogowano jako: {bot.user.name}", flush=True)
     channel = bot.get_channel(CHANNEL_ID)
     if channel:
-        await channel.send("🚀 **Bot OLX + Vinted aktywny! Sprawdzanie co 3 minuty.**")
+        await channel.send("🚀 **Bot wystartował! Rozpoczynam pierwsze skanowanie...**")
     
+    # Bezpośrednie uruchomienie taska
     if not sprawdzaj_okazje.is_running():
         sprawdzaj_okazje.start()
 
@@ -81,6 +71,7 @@ async def on_ready():
 async def sprawdzaj_okazje():
     channel = bot.get_channel(CHANNEL_ID)
     if not channel:
+        print("❌ Brak dostępu do kanału Discord! Sprawdź CHANNEL_ID.", flush=True)
         return
 
     print("🔎 Rozpoczynam skanowanie OLX i Vinted...", flush=True)
@@ -88,6 +79,7 @@ async def sprawdzaj_okazje():
     # 1. OLX
     try:
         okazje_olx = await asyncio.to_thread(pobierz_okazje, SLOWNIK_CEN, 15)
+        print(f"Pobrano z OLX: {len(okazje_olx)} ofert", flush=True)
     except Exception as e:
         print(f"❌ Błąd OLX: {e}", flush=True)
         okazje_olx = []
@@ -95,6 +87,7 @@ async def sprawdzaj_okazje():
     # 2. Vinted
     try:
         okazje_vinted = await asyncio.to_thread(pobierz_okazje_vinted, SLOWNIK_CEN, 15)
+        print(f"Pobrano z Vinted: {len(okazje_vinted)} ofert", flush=True)
     except Exception as e:
         print(f"❌ Błąd Vinted: {e}", flush=True)
         okazje_vinted = []
@@ -126,12 +119,7 @@ async def sprawdzaj_okazje():
             await channel.send(embed=embed)
             await asyncio.sleep(1)
 
-    zapisz_wyslane(wyslane_linki)
     print(f"📊 Zakończono skanowanie. Wysłano nowych okazji: {znaleziono_nowe}", flush=True)
-
-@sprawdzaj_okazje.before_loop
-async def przed_pętla():
-    await bot.wait_until_ready()
 
 # Start Flask & Bot
 Thread(target=run_flask, daemon=True).start()
