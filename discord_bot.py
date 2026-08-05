@@ -6,8 +6,12 @@ from threading import Thread
 import discord
 from discord.ext import tasks, commands
 
-# Poprawne importy z Twoich plików
-from olx import pobierz_okazje
+# Poprawny import funkcji z Twojego pliku olx.py
+try:
+    from olx import pobierz_oferty as pobierz_okazje
+except ImportError:
+    from olx import pobierz_okazje
+
 from vinted import pobierz_okazje_vinted
 
 TOKEN = os.environ.get("DISCORD_TOKEN")
