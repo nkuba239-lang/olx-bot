@@ -34,40 +34,57 @@ wyslane_linki = set()
 @bot.event
 async def on_ready():
   print(f'✅ Zalogowano jako: {bot.user}')
-  check_olx_loop.start()
+  if not check_olx_loop.is_running():
+    check_olx_loop.start()
 
 
 @tasks.loop(minutes=3)
 async def check_olx_loop():
+  print('🔎 [1/3] Rozpoczynam sprawdzanie OLX...')
   channel = bot.get_channel(CHANNEL_ID)
+
   if not channel:
+    print(
+        f'❌ BŁĄD: Nie znaleziono kanału o ID {CHANNEL_ID}! Sprawdź ID lub'
+        ' uprawnienia bota.'
+    )
     return
 
-  # Wykonujemy szukanie OLX w osobnym wątku, aby nie zrywać połączenia z Discordem
-  okazje = await asyncio.to_thread(szukaj_okazji, min_znizka_percent=20)
+  try:
+    # Ustawiono próg zniżki na 15% dla częstszych powiadomień
+    okazje = await asyncio.to_thread(szukaj_okazji, min_znizka_percent=15)
+    print(f'📊 [2/3] Znaleziono okazji: {len(okazje)}')
 
-  for o in okazje:
-    if o['link'] not in wyslane_linki:
-      wyslane_linki.add(o['link'])
+    nowe_okazje = 0
+    for o in okazje:
+      if o['link'] not in wyslane_linki:
+        wyslane_linki.add(o['link'])
+        nowe_okazje += 1
 
-      embed = discord.Embed(
-          title=f"🔥 OKAZJA: {o['tytul']}",
-          url=o['link'],
-          color=discord.Color.green(),
-      )
-      embed.add_field(name='Cena', value=f"**{o['cena']} zł**", inline=True)
-      embed.add_field(
-          name='Cena rynkowa', value=f"{o['srednia_cena']} zł", inline=True
-      )
-      embed.add_field(
-          name='Taniej o', value=f"**{o['znizka']}%**", inline=True
-      )
+        embed = discord.Embed(
+            title=f"🔥 OKAZJA: {o['tytul']}",
+            url=o['link'],
+            color=discord.Color.green(),
+        )
+        embed.add_field(name='Cena', value=f"**{o['cena']} zł**", inline=True)
+        embed.add_field(
+            name='Cena rynkowa', value=f"{o['srednia_cena']} zł", inline=True
+        )
+        embed.add_field(
+            name='Taniej o', value=f"**{o['znizka']}%**", inline=True
+        )
 
-      if o['zdjecie']:
-        embed.set_image(url=o['zdjecie'])
+        if o['zdjecie']:
+          embed.set_image(url=o['zdjecie'])
 
-      await channel.send(embed=embed)
-      await asyncio.sleep(1)
+        await channel.send(embed=embed)
+        print(f"✅ Wysyłam na Discord: {o['tytul']}")
+        await asyncio.sleep(1)
+
+    print(f'✅ [3/3] Wysłąno nowych wiadomości: {nowe_okazje}')
+
+  except Exception as e:
+    print(f'❌ Wystąpił błąd podczas pętli skanowania: {e}')
 
 
 @check_olx_loop.before_loop
