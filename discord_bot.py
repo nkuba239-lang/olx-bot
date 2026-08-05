@@ -6,20 +6,9 @@ from threading import Thread
 import discord
 from discord.ext import tasks, commands
 
-# Automatyczny import skryptu OLX
-try:
-    from scraper import pobierz_okazje
-except ImportError:
-    try:
-        from olx import pobierz_okazje
-    except ImportError:
-        def pobierz_okazje(slownik, znizka): return []
-
-# Automatyczny import skryptu Vinted
-try:
-    from vinted import pobierz_okazje_vinted
-except ImportError:
-    def pobierz_okazje_vinted(slownik, znizka): return []
+# Poprawne importy z Twoich plików
+from olx import pobierz_okazje
+from vinted import pobierz_okazje_vinted
 
 TOKEN = os.environ.get("DISCORD_TOKEN")
 CHANNEL_ID = int(os.environ.get("CHANNEL_ID", 0))
@@ -62,7 +51,7 @@ def zapisz_wyslane(baza):
 
 wyslane_linki = wczytaj_wyslane()
 
-# Flask Server
+# Serwer Flask pod Render
 app = Flask('')
 
 @app.route('/')
@@ -92,14 +81,16 @@ async def sprawdzaj_okazje():
 
     print("🔎 Rozpoczynam skanowanie OLX i Vinted...")
     
+    # 1. OLX
     try:
         okazje_olx = await asyncio.to_thread(pobierz_okazje, SLOWNIK_CEN, 15)
     except Exception as e:
         print(f"❌ Błąd OLX: {e}")
         okazje_olx = []
 
+    # 2. Vinted
     try:
-        okazje_vinted = await asyncio.to_thread(pobierz_okazje_vinted, SLOWNIK_CEN, 15)
+        okazje_vinted = await asyncio-to_thread(pobierz_okazje_vinted, SLOWNIK_CEN, 15)
     except Exception as e:
         print(f"❌ Błąd Vinted: {e}")
         okazje_vinted = []
