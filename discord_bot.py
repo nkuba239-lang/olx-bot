@@ -6,7 +6,7 @@ from discord.ext import tasks
 from flask import Flask
 from olx import szukaj_okazji
 
-# --- SERWER FLASK DLA RENDERA (Zapobiega wyłączaniu po 1 minucie) ---
+# --- SERWER FLASK DLA RENDERA ---
 app = Flask('')
 
 
@@ -21,7 +21,7 @@ def run_flask():
 
 
 threading.Thread(target=run_flask, daemon=True).start()
-# ------------------------------------------------------------------
+# --------------------------------
 
 TOKEN = os.environ.get('DISCORD_TOKEN')
 CHANNEL_ID = 1533864846527955157
@@ -34,6 +34,14 @@ wyslane_linki = set()
 @bot.event
 async def on_ready():
   print(f'✅ Zalogowano jako: {bot.user}')
+
+  # Powiadomienie startowe na Discordzie
+  channel = bot.get_channel(CHANNEL_ID)
+  if channel:
+    await channel.send('🚀 **Bot OLX został uruchomiony i skanuje oferty!**')
+  else:
+    print(f'❌ BŁĄD: Bot nie widzi kanału {CHANNEL_ID}!')
+
   if not check_olx_loop.is_running():
     check_olx_loop.start()
 
@@ -44,14 +52,10 @@ async def check_olx_loop():
   channel = bot.get_channel(CHANNEL_ID)
 
   if not channel:
-    print(
-        f'❌ BŁĄD: Nie znaleziono kanału o ID {CHANNEL_ID}! Sprawdź ID lub'
-        ' uprawnienia bota.'
-    )
+    print(f'❌ Brak dostępu do kanału {CHANNEL_ID}')
     return
 
   try:
-    # Ustawiono próg zniżki na 15% dla częstszych powiadomień
     okazje = await asyncio.to_thread(szukaj_okazji, min_znizka_percent=15)
     print(f'📊 [2/3] Znaleziono okazji: {len(okazje)}')
 
@@ -78,13 +82,13 @@ async def check_olx_loop():
           embed.set_image(url=o['zdjecie'])
 
         await channel.send(embed=embed)
-        print(f"✅ Wysyłam na Discord: {o['tytul']}")
+        print(f"✅ Wysłano na Discord: {o['tytul']}")
         await asyncio.sleep(1)
 
-    print(f'✅ [3/3] Wysłąno nowych wiadomości: {nowe_okazje}')
+    print(f'✅ [3/3] Wysłano nowych wiadomości: {nowe_okazje}')
 
   except Exception as e:
-    print(f'❌ Wystąpił błąd podczas pętli skanowania: {e}')
+    print(f'❌ Błąd podczas skanowania: {e}')
 
 
 @check_olx_loop.before_loop
@@ -95,4 +99,4 @@ async def before_check():
 if TOKEN:
   bot.run(TOKEN)
 else:
-  print('❌ BŁĄD: Brak DISCORD_TOKEN w zmiennych środowiskowych!')
+  print('❌ BŁĄD: Brak DISCORD_TOKEN!')
