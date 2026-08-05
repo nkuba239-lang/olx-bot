@@ -49,9 +49,11 @@ async def on_ready():
     print(f"✅ Zalogowano jako: {bot.user.name}", flush=True)
     channel = bot.get_channel(CHANNEL_ID)
     if channel:
-        await channel.send("🚀 **Bot OLX aktywny! Uruchamiam natychmiastowe skanowanie...**")
+        await channel.send("🚀 **Bot OLX aktywny! Skanowanie co 3 minuty.**")
     
-    bot.loop.create_task(sprawdzaj_okazje())
+    # Prawidłowe uruchomienie pętli, jeśli jeszcze nie działa
+    if not sprawdzaj_okazje.is_running():
+        sprawdzaj_okazje.start()
 
 @tasks.loop(minutes=3)
 async def sprawdzaj_okazje():
@@ -76,7 +78,6 @@ async def sprawdzaj_okazje():
             wyslane_linki.add(link)
             znaleziono_nowe += 1
             
-            # Tworzenie dużego czytelnego embeda z zielonym paskiem
             embed = discord.Embed(
                 title=f"🔥 [OLX] OKAZJA: {okazja['tytul']}",
                 url=link,
@@ -86,12 +87,11 @@ async def sprawdzaj_okazje():
             embed.add_field(name="Cena rynkowa", value=f"**{okazja.get('srednia_cena', '---')} zł**", inline=True)
             embed.add_field(name="Taniej o", value=f"**{okazja.get('znizka', '---')}%**", inline=True)
             
-            # Używamy set_image zamiast set_thumbnail do dużego zdjęcia na dole
             if okazja.get('zdjecie'):
                 embed.set_image(url=okazja['zdjecie'])
 
             await channel.send(embed=embed)
-            await asyncio.sleep(1)
+            await asyncio.sleep(0.5)
 
     zapisz_wyslane(wyslane_linki)
     print(f"📊 Zakończono skanowanie. Wysłano nowych okazji: {znaleziono_nowe}", flush=True)
