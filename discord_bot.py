@@ -5,6 +5,7 @@ import discord
 from discord.ext import tasks
 from flask import Flask
 from olx import szukaj_okazji
+from vinted import pobierz_okazje_vinted
 
 # --- SERWER FLASK DLA RENDERA ---
 app = Flask('')
@@ -12,7 +13,7 @@ app = Flask('')
 
 @app.route('/')
 def home():
-  return 'Bot OLX działa 24/7!'
+  return 'Bot OLX + Vinted działa 24/7!'
 
 
 def run_flask():
@@ -35,20 +36,21 @@ wyslane_linki = set()
 async def on_ready():
   print(f'✅ Zalogowano jako: {bot.user}')
 
-  # Powiadomienie startowe na Discordzie
   channel = bot.get_channel(CHANNEL_ID)
   if channel:
-    await channel.send('🚀 **Bot OLX uruchomiony! Skanowanie w toku...**')
+    await channel.send(
+        '🚀 **Bot OLX + Vinted uruchomiony! Skanowanie w toku...**'
+    )
   else:
     print(f'❌ BŁĄD: Bot nie widzi kanału {CHANNEL_ID}!')
 
-  if not check_olx_loop.is_running():
-    check_olx_loop.start()
+  if not check_deals_loop.is_running():
+    check_deals_loop.start()
 
 
 @tasks.loop(minutes=3)
-async def check_olx_loop():
-  print('🔎 [1/3] Rozpoczynam sprawdzanie OLX...')
+async def check_deals_loop():
+  print('🔎 [1/3] Rozpoczynam sprawdzanie OLX i Vinted...')
   channel = bot.get_channel(CHANNEL_ID)
 
   if not channel:
@@ -56,19 +58,37 @@ async def check_olx_loop():
     return
 
   try:
-    okazje = await asyncio.to_thread(szukaj_okazji, min_znizka_percent=15)
-    print(f'📊 [2/3] Znaleziono okazji w tym cyklu: {len(okazje)}')
+    # Pobieranie okazji z OLX
+    okazje_olx = await asyncio.to_thread(
+        szukaj_okazji, min_znizka_percent=15
+    )
+
+    # Pobieranie okazji z Vinted
+    okazje_vinted = await asyncio.to_thread(
+        pobierz_okazje_vinted, min_znizka_percent=15
+    )
+
+    wszystkie_okazje = okazje_olx + okazje_vinted
+    print(
+        f'📊 [2/3] Znaleziono łącznie w tym cyklu: OLX ({len(okazje_olx)}),'
+        f' Vinted ({len(okazje_vinted)})'
+    )
 
     nowe_okazje = 0
-    for o in okazje:
+    for o in wszystkie_okazje:
       if o['link'] not in wyslane_linki:
         wyslane_linki.add(o['link'])
         nowe_okazje += 1
 
+        zrodlo = o.get('zrodlo', 'OLX')
+        kolor = (
+            discord.Color.green() if zrodlo == 'OLX' else discord.Color.teal()
+        )
+
         embed = discord.Embed(
-            title=f"🔥 OKAZJA: {o['tytul']}",
+            title=f"🔥 [{zrodlo}] OKAZJA: {o['tytul']}",
             url=o['link'],
-            color=discord.Color.green(),
+            color=kolor,
         )
         embed.add_field(name='Cena', value=f"**{o['cena']} zł**", inline=True)
         embed.add_field(
@@ -82,7 +102,7 @@ async def check_olx_loop():
           embed.set_image(url=o['zdjecie'])
 
         await channel.send(embed=embed)
-        print(f"✅ Wysłano na Discord: {o['tytul']}")
+        print(f"✅ Wysłano z [{zrodlo}]: {o['tytul']}")
         await asyncio.sleep(1)
 
     print(f'✅ [3/3] Zakończono. Nowych powiadomień: {nowe_okazje}')
@@ -91,7 +111,7 @@ async def check_olx_loop():
     print(f'❌ Błąd podczas skanowania: {e}')
 
 
-@check_olx_loop.before_loop
+@check_deals_loop.before_loop
 async def before_check():
   await bot.wait_until_ready()
 
