@@ -12,7 +12,7 @@ except ImportError:
     from olx import pobierz_okazje
 
 TOKEN = os.environ.get("DISCORD_TOKEN")
-CHANNEL_ID = int(os.environ.get("CHANNEL_ID", 0))
+CHANNEL_ID = 1533864846527955157
 PORT = int(os.environ.get("PORT", 10000))
 
 SLOWNIK_CEN = {
