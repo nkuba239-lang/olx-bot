@@ -1,6 +1,5 @@
 discord.py
+flask
 requests
 beautifulsoup4
-flask
-gunicorn
 curl_cffi
