@@ -38,7 +38,7 @@ async def on_ready():
   # Powiadomienie startowe na Discordzie
   channel = bot.get_channel(CHANNEL_ID)
   if channel:
-    await channel.send('🚀 **Bot OLX został uruchomiony i skanuje oferty!**')
+    await channel.send('🚀 **Bot OLX uruchomiony! Skanowanie w toku...**')
   else:
     print(f'❌ BŁĄD: Bot nie widzi kanału {CHANNEL_ID}!')
 
@@ -57,7 +57,7 @@ async def check_olx_loop():
 
   try:
     okazje = await asyncio.to_thread(szukaj_okazji, min_znizka_percent=15)
-    print(f'📊 [2/3] Znaleziono okazji: {len(okazje)}')
+    print(f'📊 [2/3] Znaleziono okazji w tym cyklu: {len(okazje)}')
 
     nowe_okazje = 0
     for o in okazje:
@@ -85,7 +85,7 @@ async def check_olx_loop():
         print(f"✅ Wysłano na Discord: {o['tytul']}")
         await asyncio.sleep(1)
 
-    print(f'✅ [3/3] Wysłano nowych wiadomości: {nowe_okazje}')
+    print(f'✅ [3/3] Zakończono. Nowych powiadomień: {nowe_okazje}')
 
   except Exception as e:
     print(f'❌ Błąd podczas skanowania: {e}')
