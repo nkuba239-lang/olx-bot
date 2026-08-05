@@ -6,31 +6,12 @@ from threading import Thread
 import discord
 from discord.ext import tasks, commands
 
-try:
-    from olx import pobierz_oferty as pobierz_okazje
-except ImportError:
-    from olx import pobierz_okazje
+# Importujemy dokładną funkcję wyszukującą z Twojego olx.py
+from olx import szukaj_okazji
 
 TOKEN = os.environ.get("DISCORD_TOKEN")
 CHANNEL_ID = 1533864846527955157
 PORT = int(os.environ.get("PORT", 10000))
-
-SLOWNIK_CEN = {
-    "astro bot": 180,
-    "gta v": 60,
-    "gta 5": 60,
-    "god of war ragnarok": 120,
-    "spiderman 2": 160,
-    "elden ring": 130,
-    "fifa 25": 150,
-    "ea fc 25": 150,
-    "the last of us part 1": 130,
-    "the last of us part 2": 90,
-    "cyberpunk 2077": 80,
-    "red dead redemption 2": 70,
-    "witcher 3": 50,
-    "wiedźmin 3": 50
-}
 
 PLIK_BAZY = "wyslane.json"
 
@@ -52,11 +33,12 @@ def zapisz_wyslane(baza):
 
 wyslane_linki = wczytaj_wyslane()
 
+# Mini serwer pod chmurę Render
 app = Flask('')
 
 @app.route('/')
 def home():
-    return "Bot OLX is running!"
+    return "Bot OLX działa poprawnie!"
 
 def run_flask():
     app.run(host='0.0.0.0', port=PORT)
@@ -69,23 +51,24 @@ async def on_ready():
     print(f"✅ Zalogowano jako: {bot.user.name}", flush=True)
     channel = bot.get_channel(CHANNEL_ID)
     if channel:
-        await channel.send("🚀 **Bot OLX aktywny! Uruchamiam natychmiastowe skanowanie...**")
+        await channel.send("🚀 **Bot OLX uruchomiony! Skanowanie w toku...**")
     
-    # Wywołanie skanowania od razu przy wystarcie
+    # Natychmiastowe pierwsze skanowanie po starcie
     bot.loop.create_task(sprawdzaj_okazje())
 
 @tasks.loop(minutes=3)
 async def sprawdzaj_okazje():
     channel = bot.get_channel(CHANNEL_ID)
     if not channel:
-        print("❌ Brak CHANNEL_ID", flush=True)
+        print("❌ Nie znaleziono kanału na Discordzie!", flush=True)
         return
 
     print("🔎 Rozpoczynam skanowanie OLX...", flush=True)
     
     try:
-        okazje_olx = await asyncio.to_thread(pobierz_okazje, SLOWNIK_CEN, 15)
-        print(f"Pobrano z OLX: {len(okazje_olx)} ofert", flush=True)
+        # Wywołujemy funkcję szukającą okazji (min. 15% taniej)
+        okazje_olx = await asyncio.to_thread(szukaj_okazji, 15)
+        print(f"Pobrano z OLX: {len(okazje_olx)} okazji", flush=True)
     except Exception as e:
         print(f"❌ Błąd OLX: {e}", flush=True)
         okazje_olx = []
@@ -104,11 +87,11 @@ async def sprawdzaj_okazje():
                 color=discord.Color.blue()
             )
             embed.add_field(name="Cena", value=f"**{okazja['cena']} zł**", inline=True)
-            embed.add_field(name="Cena rynkowa", value=f"{okazja['cena_rynkowa']} zł", inline=True)
-            embed.add_field(name="Taniej o", value=f"**{okazja['procent']}%**", inline=True)
+            embed.add_field(name="Cena rynkowa", value=f"{okazja.get('srednia_cena', '---')} zł", inline=True)
+            embed.add_field(name="Taniej o", value=f"**{okazja.get('znizka', '---')}%**", inline=True)
             
-            if okazja.get('foto'):
-                embed.set_thumbnail(url=okazja['foto'])
+            if okazja.get('zdjecie'):
+                embed.set_thumbnail(url=okazja['zdjecie'])
 
             await channel.send(embed=embed)
             await asyncio.sleep(1)
@@ -116,5 +99,6 @@ async def sprawdzaj_okazje():
     zapisz_wyslane(wyslane_linki)
     print(f"📊 Zakończono skanowanie. Wysłano nowych okazji: {znaleziono_nowe}", flush=True)
 
+# Start aplikacji
 Thread(target=run_flask, daemon=True).start()
 bot.run(TOKEN)
