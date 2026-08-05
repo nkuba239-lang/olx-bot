@@ -6,7 +6,6 @@ from threading import Thread
 import discord
 from discord.ext import tasks, commands
 
-# Poprawny import funkcji z Twojego pliku olx.py
 try:
     from olx import pobierz_oferty as pobierz_okazje
 except ImportError:
@@ -51,11 +50,11 @@ def zapisz_wyslane(baza):
         with open(PLIK_BAZY, "w") as f:
             json.dump(list(baza), f)
     except Exception as e:
-        print(f"Błąd zapisu bazy: {e}")
+        print(f"Błąd zapisu bazy: {e}", flush=True)
 
 wyslane_linki = wczytaj_wyslane()
 
-# Serwer Flask pod Render
+# Flask Server
 app = Flask('')
 
 @app.route('/')
@@ -70,10 +69,11 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 @bot.event
 async def on_ready():
-    print(f"✅ Zalogowano jako: {bot.user.name}")
+    print(f"✅ Zalogowano jako: {bot.user.name}", flush=True)
     channel = bot.get_channel(CHANNEL_ID)
     if channel:
         await channel.send("🚀 **Bot OLX + Vinted aktywny! Sprawdzanie co 3 minuty.**")
+    
     if not sprawdzaj_okazje.is_running():
         sprawdzaj_okazje.start()
 
@@ -83,20 +83,20 @@ async def sprawdzaj_okazje():
     if not channel:
         return
 
-    print("🔎 Rozpoczynam skanowanie OLX i Vinted...")
+    print("🔎 Rozpoczynam skanowanie OLX i Vinted...", flush=True)
     
     # 1. OLX
     try:
         okazje_olx = await asyncio.to_thread(pobierz_okazje, SLOWNIK_CEN, 15)
     except Exception as e:
-        print(f"❌ Błąd OLX: {e}")
+        print(f"❌ Błąd OLX: {e}", flush=True)
         okazje_olx = []
 
     # 2. Vinted
     try:
         okazje_vinted = await asyncio.to_thread(pobierz_okazje_vinted, SLOWNIK_CEN, 15)
     except Exception as e:
-        print(f"❌ Błąd Vinted: {e}")
+        print(f"❌ Błąd Vinted: {e}", flush=True)
         okazje_vinted = []
 
     wszystkie_okazje = okazje_olx + okazje_vinted
@@ -127,7 +127,11 @@ async def sprawdzaj_okazje():
             await asyncio.sleep(1)
 
     zapisz_wyslane(wyslane_linki)
-    print(f"📊 Zakończono skanowanie. Wysłano nowych okazji: {znaleziono_nowe}")
+    print(f"📊 Zakończono skanowanie. Wysłano nowych okazji: {znaleziono_nowe}", flush=True)
+
+@sprawdzaj_okazje.before_loop
+async def przed_pętla():
+    await bot.wait_until_ready()
 
 # Start Flask & Bot
 Thread(target=run_flask, daemon=True).start()
