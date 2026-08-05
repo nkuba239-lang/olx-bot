@@ -1,113 +1,81 @@
+import asyncio
 import os
 import threading
+import discord
+from discord.ext import tasks
 from flask import Flask
+from olx import szukaj_okazji
 
+# --- SERWER FLASK DLA RENDERA (Zapobiega wyłączaniu po 1 minucie) ---
 app = Flask('')
 
 
 @app.route('/')
 def home():
-    return 'Bot dziala 24/7!'
+  return 'Bot OLX działa 24/7!'
 
 
 def run_flask():
-    port = int(os.environ.get('PORT', 8080))
-    app.run(host='0.0.0.0', port=port)
+  port = int(os.environ.get('PORT', 8080))
+  app.run(host='0.0.0.0', port=port)
 
 
 threading.Thread(target=run_flask, daemon=True).start()
-import discord
-from discord.ext import commands, tasks
-import json
-import os
-import asyncio
-from olx import szukaj_okazji
+# ------------------------------------------------------------------
 
-import os
-
-TOKEN = os.getenv("DISCORD_TOKEN") 
-CHANNEL_ID = 1533864846527955157  
+TOKEN = os.environ.get('DISCORD_TOKEN')
+CHANNEL_ID = 123456789012345678  # PODMIEŃ NA SWÓJ ID KANAŁU DISCORD!
 
 intents = discord.Intents.default()
-intents.message_content = True
-bot = commands.Bot(command_prefix="!", intents=intents)
+bot = discord.Client(intents=intents)
+wyslane_linki = set()
 
-SEEN_FILE = "seen_deals.json"
-
-def load_seen():
-    if os.path.exists(SEEN_FILE):
-        try:
-            with open(SEEN_FILE, "r") as f:
-                return set(json.load(f))
-        except Exception as e:
-            print(f"Błąd wczytywania seen_deals: {e}")
-            return set()
-    return set()
-
-def save_seen(seen_set):
-    try:
-        with open(SEEN_FILE, "w") as f:
-            json.dump(list(seen_set), f)
-    except Exception as e:
-        print(f"Błąd zapisu seen_deals: {e}")
-
-seen_deals = load_seen()
 
 @bot.event
 async def on_ready():
-    print(f"✅ Zalogowano jako: {bot.user.name}")
-    if not check_olx_loop.is_running():
-        check_olx_loop.start()
+  print(f'✅ Zalogowano jako: {bot.user}')
+  check_olx_loop.start()
+
 
 @tasks.loop(minutes=3)
 async def check_olx_loop():
-    channel = bot.get_channel(CHANNEL_ID)
-    if not channel:
-        print(f"❌ Nie znaleziono kanału o ID {CHANNEL_ID}!")
-        return
+  channel = bot.get_channel(CHANNEL_ID)
+  if not channel:
+    return
 
-    print("🔎 Skanuję OLX...")
-    try:
-        okazje = szukaj_okazji(min_znizka_percent=20)
-    except Exception as e:
-        print(f"❌ Błąd podczas wykonywania szukaj_okazji: {e}")
-        return
+  # Wykonujemy szukanie OLX w osobnym wątku, aby nie zrywać połączenia z Discordem
+  okazje = await asyncio.to_thread(szukaj_okazji, min_znizka_percent=20)
 
-    wyslane_count = 0
+  for o in okazje:
+    if o['link'] not in wyslane_linki:
+      wyslane_linki.add(o['link'])
 
-    for okazja in okazje:
-        link = okazja.get("link")
-        if not link or link in seen_deals:
-            continue
+      embed = discord.Embed(
+          title=f"🔥 OKAZJA: {o['tytul']}",
+          url=o['link'],
+          color=discord.Color.green(),
+      )
+      embed.add_field(name='Cena', value=f"**{o['cena']} zł**", inline=True)
+      embed.add_field(
+          name='Cena rynkowa', value=f"{o['srednia_cena']} zł", inline=True
+      )
+      embed.add_field(
+          name='Taniej o', value=f"**{o['znizka']}%**", inline=True
+      )
 
-        zysk = round(okazja.get("srednia_cena", 0) - okazja.get("cena", 0), 2)
+      if o['zdjecie']:
+        embed.set_image(url=o['zdjecie'])
 
-        embed = discord.Embed(
-            title=f"🔥 OKAZJA! -{okazja.get('znizka', 0)}% na OLX",
-            url=link,
-            description=f"**{okazja.get('tytul', 'Brak tytułu')}**",
-            color=discord.Color.green()
-        )
-        embed.add_field(name="Cena na OLX", value=f"**{okazja.get('cena', 0)} zł**", inline=True)
-        embed.add_field(name="Średnia rynkowa", value=f"~~{okazja.get('srednia_cena', 0)} zł~~", inline=True)
-        embed.add_field(name="Zysk", value=f"**+{zysk} zł**", inline=False)
+      await channel.send(embed=embed)
+      await asyncio.sleep(1)
 
-        zdjecie_url = okazja.get("zdjecie")
-        if zdjecie_url and str(zdjecie_url).startswith("http"):
-            embed.set_image(url=zdjecie_url)
 
-        embed.set_footer(text="Bot OLX • PS4/PS5")
+@check_olx_loop.before_loop
+async def before_check():
+  await bot.wait_until_ready()
 
-        try:
-            await channel.send(embed=embed)
-            wyslane_count += 1
-            seen_deals.add(link)
-            save_seen(seen_deals)
-            # Małe opóźnienie, aby Discord nie zablokował bota za spam (Rate Limit)
-            await asyncio.sleep(1)
-        except Exception as e:
-            print(f"❌ Błąd wysyłania wiadomości dla '{okazja.get('tytul')}': {e}")
 
-    print(f"✅ Wysłano nowych okazji na Discord: {wyslane_count}")
-
-bot.run(TOKEN)
+if TOKEN:
+  bot.run(TOKEN)
+else:
+  print('❌ BŁĄD: Brak DISCORD_TOKEN w zmiennych środowiskowych!')
