@@ -6,12 +6,24 @@ from threading import Thread
 import discord
 from discord.ext import tasks, commands
 
-# Importy Twoich skryptów
-from scraper import pobierz_okazje  # Skrypt OLX
-from vinted import pobierz_okazje_vinted  # Skrypt Vinted
+# Automatyczny import skryptu OLX
+try:
+    from scraper import pobierz_okazje
+except ImportError:
+    try:
+        from olx import pobierz_okazje
+    except ImportError:
+        def pobierz_okazje(slownik, znizka): return []
+
+# Automatyczny import skryptu Vinted
+try:
+    from vinted import pobierz_okazje_vinted
+except ImportError:
+    def pobierz_okazje_vinted(slownik, znizka): return []
 
 TOKEN = os.environ.get("DISCORD_TOKEN")
 CHANNEL_ID = int(os.environ.get("CHANNEL_ID", 0))
+PORT = int(os.environ.get("PORT", 10000))
 
 SLOWNIK_CEN = {
     "astro bot": 180,
@@ -30,25 +42,27 @@ SLOWNIK_CEN = {
     "wiedźmin 3": 50
 }
 
-# Plik pamięci wysłanych linków (odporny na restarty)
-PLIK_Bazy = "wyslane.json"
+PLIK_BAZY = "wyslane.json"
 
 def wczytaj_wyslane():
-    if os.path.exists(PLIK_Bazy):
-        with open(PLIK_Bazy, "r") as f:
-            try:
+    if os.path.exists(PLIK_BAZY):
+        try:
+            with open(PLIK_BAZY, "r") as f:
                 return set(json.load(f))
-            except:
-                return set()
+        except Exception:
+            return set()
     return set()
 
 def zapisz_wyslane(baza):
-    with open(PLIK_Bazy, "w") as f:
-        json.dump(list(baza), f)
+    try:
+        with open(PLIK_BAZY, "w") as f:
+            json.dump(list(baza), f)
+    except Exception as e:
+        print(f"Błąd zapisu bazy: {e}")
 
 wyslane_linki = wczytaj_wyslane()
 
-# Flask Server (Pinging)
+# Flask Server
 app = Flask('')
 
 @app.route('/')
@@ -56,7 +70,7 @@ def home():
     return "Bot is running!"
 
 def run_flask():
-    app.run(host='0.0.0.0', port=10000)
+    app.run(host='0.0.0.0', port=PORT)
 
 intents = discord.Intents.default()
 bot = commands.Bot(command_prefix="!", intents=intents)
@@ -78,14 +92,12 @@ async def sprawdzaj_okazje():
 
     print("🔎 Rozpoczynam skanowanie OLX i Vinted...")
     
-    # 1. Pobieranie z OLX
     try:
         okazje_olx = await asyncio.to_thread(pobierz_okazje, SLOWNIK_CEN, 15)
     except Exception as e:
         print(f"❌ Błąd OLX: {e}")
         okazje_olx = []
 
-    # 2. Pobieranie z Vinted
     try:
         okazje_vinted = await asyncio.to_thread(pobierz_okazje_vinted, SLOWNIK_CEN, 15)
     except Exception as e:
@@ -96,8 +108,8 @@ async def sprawdzaj_okazje():
     znaleziono_nowe = 0
 
     for okazja in wszystkie_okazje:
-        link = okazja['link']
-        if link not in wyslane_linki:
+        link = okazja.get('link')
+        if link and link not in wyslane_linki:
             wyslane_linki.add(link)
             znaleziono_nowe += 1
             
@@ -120,10 +132,8 @@ async def sprawdzaj_okazje():
             await asyncio.sleep(1)
 
     zapisz_wyslane(wyslane_linki)
-    print(f"📊 Zakończono skanowanie. Wysłąno nowych okazji: {znaleziono_nowe}")
+    print(f"📊 Zakończono skanowanie. Wysłano nowych okazji: {znaleziono_nowe}")
 
-# Start Flask
-Thread(target=run_flask).start()
-
-# Start Bot
+# Start Flask & Bot
+Thread(target=run_flask, daemon=True).start()
 bot.run(TOKEN)
