@@ -6,7 +6,6 @@ from threading import Thread
 import discord
 from discord.ext import tasks, commands
 
-# Bezpieczne importowanie funkcji z pliku olx.py
 try:
     from olx import pobierz_oferty as pobierz_okazje
 except ImportError:
@@ -53,7 +52,6 @@ def zapisz_wyslane(baza):
 
 wyslane_linki = wczytaj_wyslane()
 
-# Flask pod Render
 app = Flask('')
 
 @app.route('/')
@@ -71,10 +69,10 @@ async def on_ready():
     print(f"✅ Zalogowano jako: {bot.user.name}", flush=True)
     channel = bot.get_channel(CHANNEL_ID)
     if channel:
-        await channel.send("🚀 **Bot OLX reaktywowany! Skanowanie co 3 minuty.**")
+        await channel.send("🚀 **Bot OLX aktywny! Uruchamiam natychmiastowe skanowanie...**")
     
-    if not sprawdzaj_okazje.is_running():
-        sprawdzaj_okazje.start()
+    # Wywołanie skanowania od razu przy wystarcie
+    bot.loop.create_task(sprawdzaj_okazje())
 
 @tasks.loop(minutes=3)
 async def sprawdzaj_okazje():
@@ -118,6 +116,5 @@ async def sprawdzaj_okazje():
     zapisz_wyslane(wyslane_linki)
     print(f"📊 Zakończono skanowanie. Wysłano nowych okazji: {znaleziono_nowe}", flush=True)
 
-# Start Serwera i Bota
 Thread(target=run_flask, daemon=True).start()
 bot.run(TOKEN)
