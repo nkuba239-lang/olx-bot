@@ -6,12 +6,11 @@ from threading import Thread
 import discord
 from discord.ext import tasks, commands
 
+# Bezpieczne importowanie funkcji z pliku olx.py
 try:
     from olx import pobierz_oferty as pobierz_okazje
 except ImportError:
     from olx import pobierz_okazje
-
-from vinted import pobierz_okazje_vinted
 
 TOKEN = os.environ.get("DISCORD_TOKEN")
 CHANNEL_ID = int(os.environ.get("CHANNEL_ID", 0))
@@ -19,8 +18,8 @@ PORT = int(os.environ.get("PORT", 10000))
 
 SLOWNIK_CEN = {
     "astro bot": 180,
-    "gta v": 500,  
-    "gta 5": 500,
+    "gta v": 60,
+    "gta 5": 60,
     "god of war ragnarok": 120,
     "spiderman 2": 160,
     "elden ring": 130,
@@ -34,21 +33,32 @@ SLOWNIK_CEN = {
     "wiedźmin 3": 50
 }
 
-# Czysta baza na czas testu (żeby wysłało wszystko)
+PLIK_BAZY = "wyslane.json"
+
 def wczytaj_wyslane():
+    if os.path.exists(PLIK_BAZY):
+        try:
+            with open(PLIK_BAZY, "r") as f:
+                return set(json.load(f))
+        except Exception:
+            return set()
     return set()
 
 def zapisz_wyslane(baza):
-    pass
+    try:
+        with open(PLIK_BAZY, "w") as f:
+            json.dump(list(baza), f)
+    except Exception as e:
+        print(f"Błąd zapisu bazy: {e}", flush=True)
 
 wyslane_linki = wczytaj_wyslane()
 
-# Flask Server
+# Flask pod Render
 app = Flask('')
 
 @app.route('/')
 def home():
-    return "Bot is running!"
+    return "Bot OLX is running!"
 
 def run_flask():
     app.run(host='0.0.0.0', port=PORT)
@@ -61,9 +71,8 @@ async def on_ready():
     print(f"✅ Zalogowano jako: {bot.user.name}", flush=True)
     channel = bot.get_channel(CHANNEL_ID)
     if channel:
-        await channel.send("🚀 **Bot wystartował! Rozpoczynam pierwsze skanowanie...**")
+        await channel.send("🚀 **Bot OLX reaktywowany! Skanowanie co 3 minuty.**")
     
-    # Bezpośrednie uruchomienie taska
     if not sprawdzaj_okazje.is_running():
         sprawdzaj_okazje.start()
 
@@ -71,12 +80,11 @@ async def on_ready():
 async def sprawdzaj_okazje():
     channel = bot.get_channel(CHANNEL_ID)
     if not channel:
-        print("❌ Brak dostępu do kanału Discord! Sprawdź CHANNEL_ID.", flush=True)
+        print("❌ Brak CHANNEL_ID", flush=True)
         return
 
-    print("🔎 Rozpoczynam skanowanie OLX i Vinted...", flush=True)
+    print("🔎 Rozpoczynam skanowanie OLX...", flush=True)
     
-    # 1. OLX
     try:
         okazje_olx = await asyncio.to_thread(pobierz_okazje, SLOWNIK_CEN, 15)
         print(f"Pobrano z OLX: {len(okazje_olx)} ofert", flush=True)
@@ -84,30 +92,18 @@ async def sprawdzaj_okazje():
         print(f"❌ Błąd OLX: {e}", flush=True)
         okazje_olx = []
 
-    # 2. Vinted
-    try:
-        okazje_vinted = await asyncio.to_thread(pobierz_okazje_vinted, SLOWNIK_CEN, 15)
-        print(f"Pobrano z Vinted: {len(okazje_vinted)} ofert", flush=True)
-    except Exception as e:
-        print(f"❌ Błąd Vinted: {e}", flush=True)
-        okazje_vinted = []
-
-    wszystkie_okazje = okazje_olx + okazje_vinted
     znaleziono_nowe = 0
 
-    for okazja in wszystkie_okazje:
+    for okazja in okazje_olx:
         link = okazja.get('link')
         if link and link not in wyslane_linki:
             wyslane_linki.add(link)
             znaleziono_nowe += 1
             
-            zrodlo = okazja.get('zrodlo', 'OLX')
-            kolor = discord.Color.green() if zrodlo == 'Vinted' else discord.Color.blue()
-
             embed = discord.Embed(
-                title=f"🔥 OKAZJA {zrodlo}: {okazja['tytul']}",
+                title=f"🔥 OKAZJA OLX: {okazja['tytul']}",
                 url=link,
-                color=kolor
+                color=discord.Color.blue()
             )
             embed.add_field(name="Cena", value=f"**{okazja['cena']} zł**", inline=True)
             embed.add_field(name="Cena rynkowa", value=f"{okazja['cena_rynkowa']} zł", inline=True)
@@ -119,8 +115,9 @@ async def sprawdzaj_okazje():
             await channel.send(embed=embed)
             await asyncio.sleep(1)
 
+    zapisz_wyslane(wyslane_linki)
     print(f"📊 Zakończono skanowanie. Wysłano nowych okazji: {znaleziono_nowe}", flush=True)
 
-# Start Flask & Bot
+# Start Serwera i Bota
 Thread(target=run_flask, daemon=True).start()
 bot.run(TOKEN)
