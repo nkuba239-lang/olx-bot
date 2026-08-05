@@ -1,122 +1,129 @@
-import asyncio
 import os
-import threading
-import discord
-from discord.ext import tasks
+import json
+import asyncio
 from flask import Flask
-from olx import szukaj_okazji
-from vinted import pobierz_okazje_vinted
+from threading import Thread
+import discord
+from discord.ext import tasks, commands
 
-# --- SERWER FLASK DLA RENDERA ---
+# Importy Twoich skryptów
+from scraper import pobierz_okazje  # Skrypt OLX
+from vinted import pobierz_okazje_vinted  # Skrypt Vinted
+
+TOKEN = os.environ.get("DISCORD_TOKEN")
+CHANNEL_ID = int(os.environ.get("CHANNEL_ID", 0))
+
+SLOWNIK_CEN = {
+    "astro bot": 180,
+    "gta v": 60,
+    "gta 5": 60,
+    "god of war ragnarok": 120,
+    "spiderman 2": 160,
+    "elden ring": 130,
+    "fifa 25": 150,
+    "ea fc 25": 150,
+    "the last of us part 1": 130,
+    "the last of us part 2": 90,
+    "cyberpunk 2077": 80,
+    "red dead redemption 2": 70,
+    "witcher 3": 50,
+    "wiedźmin 3": 50
+}
+
+# Plik pamięci wysłanych linków (odporny na restarty)
+PLIK_Bazy = "wyslane.json"
+
+def wczytaj_wyslane():
+    if os.path.exists(PLIK_Bazy):
+        with open(PLIK_Bazy, "r") as f:
+            try:
+                return set(json.load(f))
+            except:
+                return set()
+    return set()
+
+def zapisz_wyslane(baza):
+    with open(PLIK_Bazy, "w") as f:
+        json.dump(list(baza), f)
+
+wyslane_linki = wczytaj_wyslane()
+
+# Flask Server (Pinging)
 app = Flask('')
-
 
 @app.route('/')
 def home():
-  return 'Bot OLX + Vinted działa 24/7!'
-
+    return "Bot is running!"
 
 def run_flask():
-  port = int(os.environ.get('PORT', 8080))
-  app.run(host='0.0.0.0', port=port)
-
-
-threading.Thread(target=run_flask, daemon=True).start()
-# --------------------------------
-
-TOKEN = os.environ.get('DISCORD_TOKEN')
-CHANNEL_ID = 1533864846527955157
+    app.run(host='0.0.0.0', port=10000)
 
 intents = discord.Intents.default()
-bot = discord.Client(intents=intents)
-wyslane_linki = set()
-
+bot = commands.Bot(command_prefix="!", intents=intents)
 
 @bot.event
 async def on_ready():
-  print(f'✅ Zalogowano jako: {bot.user}')
-
-  channel = bot.get_channel(CHANNEL_ID)
-  if channel:
-    await channel.send(
-        '🚀 **Bot OLX + Vinted uruchomiony! Skanowanie w toku...**'
-    )
-  else:
-    print(f'❌ BŁĄD: Bot nie widzi kanału {CHANNEL_ID}!')
-
-  if not check_deals_loop.is_running():
-    check_deals_loop.start()
-
+    print(f"✅ Zalogowano jako: {bot.user.name}")
+    channel = bot.get_channel(CHANNEL_ID)
+    if channel:
+        await channel.send("🚀 **Bot OLX + Vinted aktywny! Sprawdzanie co 3 minuty.**")
+    if not sprawdzaj_okazje.is_running():
+        sprawdzaj_okazje.start()
 
 @tasks.loop(minutes=3)
-async def check_deals_loop():
-  print('🔎 [1/3] Rozpoczynam sprawdzanie OLX i Vinted...')
-  channel = bot.get_channel(CHANNEL_ID)
+async def sprawdzaj_okazje():
+    channel = bot.get_channel(CHANNEL_ID)
+    if not channel:
+        return
 
-  if not channel:
-    print(f'❌ Brak dostępu do kanału {CHANNEL_ID}')
-    return
+    print("🔎 Rozpoczynam skanowanie OLX i Vinted...")
+    
+    # 1. Pobieranie z OLX
+    try:
+        okazje_olx = await asyncio.to_thread(pobierz_okazje, SLOWNIK_CEN, 15)
+    except Exception as e:
+        print(f"❌ Błąd OLX: {e}")
+        okazje_olx = []
 
-  try:
-    # Pobieranie okazji z OLX
-    okazje_olx = await asyncio.to_thread(
-        szukaj_okazji, min_znizka_percent=15
-    )
-
-    # Pobieranie okazji z Vinted
-    okazje_vinted = await asyncio.to_thread(
-        pobierz_okazje_vinted, min_znizka_percent=15
-    )
+    # 2. Pobieranie z Vinted
+    try:
+        okazje_vinted = await asyncio.to_thread(pobierz_okazje_vinted, SLOWNIK_CEN, 15)
+    except Exception as e:
+        print(f"❌ Błąd Vinted: {e}")
+        okazje_vinted = []
 
     wszystkie_okazje = okazje_olx + okazje_vinted
-    print(
-        f'📊 [2/3] Znaleziono łącznie w tym cyklu: OLX ({len(okazje_olx)}),'
-        f' Vinted ({len(okazje_vinted)})'
-    )
+    znaleziono_nowe = 0
 
-    nowe_okazje = 0
-    for o in wszystkie_okazje:
-      if o['link'] not in wyslane_linki:
-        wyslane_linki.add(o['link'])
-        nowe_okazje += 1
+    for okazja in wszystkie_okazje:
+        link = okazja['link']
+        if link not in wyslane_linki:
+            wyslane_linki.add(link)
+            znaleziono_nowe += 1
+            
+            zrodlo = okazja.get('zrodlo', 'OLX')
+            kolor = discord.Color.green() if zrodlo == 'Vinted' else discord.Color.blue()
 
-        zrodlo = o.get('zrodlo', 'OLX')
-        kolor = (
-            discord.Color.green() if zrodlo == 'OLX' else discord.Color.teal()
-        )
+            embed = discord.Embed(
+                title=f"🔥 OKAZJA {zrodlo}: {okazja['tytul']}",
+                url=link,
+                color=kolor
+            )
+            embed.add_field(name="Cena", value=f"**{okazja['cena']} zł**", inline=True)
+            embed.add_field(name="Cena rynkowa", value=f"{okazja['cena_rynkowa']} zł", inline=True)
+            embed.add_field(name="Taniej o", value=f"**{okazja['procent']}%**", inline=True)
+            
+            if okazja.get('foto'):
+                embed.set_thumbnail(url=okazja['foto'])
 
-        embed = discord.Embed(
-            title=f"🔥 [{zrodlo}] OKAZJA: {o['tytul']}",
-            url=o['link'],
-            color=kolor,
-        )
-        embed.add_field(name='Cena', value=f"**{o['cena']} zł**", inline=True)
-        embed.add_field(
-            name='Cena rynkowa', value=f"{o['srednia_cena']} zł", inline=True
-        )
-        embed.add_field(
-            name='Taniej o', value=f"**{o['znizka']}%**", inline=True
-        )
+            await channel.send(embed=embed)
+            await asyncio.sleep(1)
 
-        if o['zdjecie']:
-          embed.set_image(url=o['zdjecie'])
+    zapisz_wyslane(wyslane_linki)
+    print(f"📊 Zakończono skanowanie. Wysłąno nowych okazji: {znaleziono_nowe}")
 
-        await channel.send(embed=embed)
-        print(f"✅ Wysłano z [{zrodlo}]: {o['tytul']}")
-        await asyncio.sleep(1)
+# Start Flask
+Thread(target=run_flask).start()
 
-    print(f'✅ [3/3] Zakończono. Nowych powiadomień: {nowe_okazje}')
-
-  except Exception as e:
-    print(f'❌ Błąd podczas skanowania: {e}')
-
-
-@check_deals_loop.before_loop
-async def before_check():
-  await bot.wait_until_ready()
-
-
-if TOKEN:
-  bot.run(TOKEN)
-else:
-  print('❌ BŁĄD: Brak DISCORD_TOKEN!')
+# Start Bot
+bot.run(TOKEN)
