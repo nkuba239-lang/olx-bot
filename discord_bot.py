@@ -6,7 +6,6 @@ from threading import Thread
 import discord
 from discord.ext import tasks, commands
 
-# Importujemy dokładną funkcję wyszukującą z Twojego olx.py
 from olx import szukaj_okazji
 
 TOKEN = os.environ.get("DISCORD_TOKEN")
@@ -33,12 +32,11 @@ def zapisz_wyslane(baza):
 
 wyslane_linki = wczytaj_wyslane()
 
-# Mini serwer pod chmurę Render
 app = Flask('')
 
 @app.route('/')
 def home():
-    return "Bot OLX działa poprawnie!"
+    return "Bot OLX is running!"
 
 def run_flask():
     app.run(host='0.0.0.0', port=PORT)
@@ -51,22 +49,19 @@ async def on_ready():
     print(f"✅ Zalogowano jako: {bot.user.name}", flush=True)
     channel = bot.get_channel(CHANNEL_ID)
     if channel:
-        await channel.send("🚀 **Bot OLX uruchomiony! Skanowanie w toku...**")
+        await channel.send("🚀 **Bot OLX aktywny! Uruchamiam natychmiastowe skanowanie...**")
     
-    # Natychmiastowe pierwsze skanowanie po starcie
     bot.loop.create_task(sprawdzaj_okazje())
 
 @tasks.loop(minutes=3)
 async def sprawdzaj_okazje():
     channel = bot.get_channel(CHANNEL_ID)
     if not channel:
-        print("❌ Nie znaleziono kanału na Discordzie!", flush=True)
         return
 
     print("🔎 Rozpoczynam skanowanie OLX...", flush=True)
     
     try:
-        # Wywołujemy funkcję szukającą okazji (min. 15% taniej)
         okazje_olx = await asyncio.to_thread(szukaj_okazji, 15)
         print(f"Pobrano z OLX: {len(okazje_olx)} okazji", flush=True)
     except Exception as e:
@@ -81,17 +76,19 @@ async def sprawdzaj_okazje():
             wyslane_linki.add(link)
             znaleziono_nowe += 1
             
+            # Tworzenie dużego czytelnego embeda z zielonym paskiem
             embed = discord.Embed(
-                title=f"🔥 OKAZJA OLX: {okazja['tytul']}",
+                title=f"🔥 [OLX] OKAZJA: {okazja['tytul']}",
                 url=link,
-                color=discord.Color.blue()
+                color=discord.Color.green()
             )
             embed.add_field(name="Cena", value=f"**{okazja['cena']} zł**", inline=True)
-            embed.add_field(name="Cena rynkowa", value=f"{okazja.get('srednia_cena', '---')} zł", inline=True)
+            embed.add_field(name="Cena rynkowa", value=f"**{okazja.get('srednia_cena', '---')} zł**", inline=True)
             embed.add_field(name="Taniej o", value=f"**{okazja.get('znizka', '---')}%**", inline=True)
             
+            # Używamy set_image zamiast set_thumbnail do dużego zdjęcia na dole
             if okazja.get('zdjecie'):
-                embed.set_thumbnail(url=okazja['zdjecie'])
+                embed.set_image(url=okazja['zdjecie'])
 
             await channel.send(embed=embed)
             await asyncio.sleep(1)
@@ -99,6 +96,5 @@ async def sprawdzaj_okazje():
     zapisz_wyslane(wyslane_linki)
     print(f"📊 Zakończono skanowanie. Wysłano nowych okazji: {znaleziono_nowe}", flush=True)
 
-# Start aplikacji
 Thread(target=run_flask, daemon=True).start()
 bot.run(TOKEN)
